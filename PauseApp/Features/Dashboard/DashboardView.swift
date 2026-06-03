@@ -1,9 +1,8 @@
 import SwiftUI
-import SwiftData
 import Charts
 
 struct DashboardView: View {
-    @Query(sort: \InterventionEvent.timestamp, order: .reverse) private var events: [InterventionEvent]
+    @State private var events: [SharedEvent] = []
     @AppStorage("estimated_session_minutes") private var estimatedMinutes: Double = 20.0
 
     private var resistedCount: Int   { events.filter(\.resisted).count }
@@ -11,7 +10,7 @@ struct DashboardView: View {
     private var resistanceRate: Double {
         events.isEmpty ? 0 : Double(resistedCount) / Double(events.count) * 100
     }
-    private var timeSaved: Double    { Double(resistedCount) * estimatedMinutes }
+    private var timeSaved: Double { Double(resistedCount) * estimatedMinutes }
 
     private var last7Days: [DayBucket] {
         let cal = Calendar.current
@@ -20,9 +19,11 @@ struct DashboardView: View {
             let start = cal.startOfDay(for: date)
             let end   = cal.date(byAdding: .day, value: 1, to: start)!
             let day   = events.filter { $0.timestamp >= start && $0.timestamp < end }
-            return DayBucket(date: date,
-                             resisted: day.filter(\.resisted).count,
-                             opened:   day.filter { !$0.resisted }.count)
+            return DayBucket(
+                date: date,
+                resisted: day.filter(\.resisted).count,
+                opened:   day.filter { !$0.resisted }.count
+            )
         }
     }
 
@@ -34,8 +35,9 @@ struct DashboardView: View {
             if e.resisted { s.r += 1 }
             dict[e.appName] = s
         }
-        return dict.map { AppStat(name: $0.key, resisted: $0.value.r, total: $0.value.t) }
-                   .sorted { $0.total > $1.total }
+        return dict
+            .map { AppStat(name: $0.key, resisted: $0.value.r, total: $0.value.t) }
+            .sorted { $0.total > $1.total }
     }
 
     var body: some View {
@@ -47,37 +49,33 @@ struct DashboardView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 20) {
-                            // Stat cards
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
                                 StatCard(title: "Interventions", value: "\(events.count)",
-                                         icon: "hand.raised.fill",  color: Theme.accent)
+                                         icon: "hand.raised.fill",      color: Theme.accent)
                                 StatCard(title: "Résistance",    value: "\(Int(resistanceRate))%",
-                                         icon: "shield.fill",       color: Theme.green)
+                                         icon: "shield.fill",            color: Theme.green)
                                 StatCard(title: "Ouvertes",       value: "\(openedCount)",
                                          icon: "arrow.right.circle.fill", color: Theme.red)
                                 StatCard(title: "Temps économ.", value: formatTime(timeSaved),
-                                         icon: "clock.fill",       color: Theme.amber)
+                                         icon: "clock.fill",             color: Theme.amber)
                             }
 
-                            // 7-day chart
                             VStack(alignment: .leading, spacing: 14) {
                                 Text("7 derniers jours")
                                     .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
 
                                 Chart(last7Days) { bucket in
                                     BarMark(
-                                        x: .value("Jour",      bucket.date, unit: .day),
+                                        x: .value("Jour",       bucket.date, unit: .day),
                                         y: .value("Résistées", bucket.resisted)
                                     )
-                                    .foregroundStyle(Theme.accent)
-                                    .cornerRadius(4)
+                                    .foregroundStyle(Theme.accent).cornerRadius(4)
 
                                     BarMark(
-                                        x: .value("Jour",    bucket.date, unit: .day),
+                                        x: .value("Jour",     bucket.date, unit: .day),
                                         y: .value("Ouvertes", bucket.opened)
                                     )
-                                    .foregroundStyle(Theme.red.opacity(0.6))
-                                    .cornerRadius(4)
+                                    .foregroundStyle(Theme.red.opacity(0.6)).cornerRadius(4)
                                 }
                                 .chartXAxis {
                                     AxisMarks(values: .stride(by: .day)) { _ in
@@ -101,14 +99,11 @@ struct DashboardView: View {
                             .padding(20).background(Theme.surface)
                             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
 
-                            // Per-app breakdown
                             if !perAppStats.isEmpty {
                                 VStack(alignment: .leading, spacing: 14) {
                                     Text("Par application")
                                         .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
-                                    ForEach(perAppStats) { stat in
-                                        AppStatRow(stat: stat)
-                                    }
+                                    ForEach(perAppStats) { AppStatRow(stat: $0) }
                                 }
                                 .padding(20).background(Theme.surface)
                                 .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius))
@@ -120,24 +115,27 @@ struct DashboardView: View {
             }
             .navigationTitle("Statistiques")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear { reload() }
         }
+    }
+
+    private func reload() {
+        events = SharedDefaults.loadEvents().sorted { $0.timestamp > $1.timestamp }
     }
 
     private func formatTime(_ minutes: Double) -> String {
         let m = Int(minutes)
         guard m >= 60 else { return "\(m)min" }
-        let h = m / 60; let rem = m % 60
-        return rem == 0 ? "\(h)h" : "\(h)h\(rem)"
+        let h = m / 60; let r = m % 60
+        return r == 0 ? "\(h)h" : "\(h)h\(r)"
     }
 }
 
-// MARK: - Models
-
 struct DayBucket: Identifiable {
-    let id   = UUID()
+    let id = UUID()
     let date: Date
     let resisted: Int
-    let opened:   Int
+    let opened: Int
 }
 
 struct AppStat: Identifiable {
@@ -148,13 +146,8 @@ struct AppStat: Identifiable {
     var rate: Double { total > 0 ? Double(resisted) / Double(total) : 0 }
 }
 
-// MARK: - Sub-views
-
 struct StatCard: View {
-    let title: String
-    let value: String
-    let icon:  String
-    let color: Color
+    let title: String; let value: String; let icon: String; let color: Color
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Image(systemName: icon).font(.system(size: 16)).foregroundStyle(color)
@@ -206,7 +199,7 @@ struct EmptyDashboardView: View {
             VStack(spacing: 8) {
                 Text("Pas encore de données")
                     .font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.text)
-                Text("Configure une app et teste le lien Raccourcis pour voir tes stats.")
+                Text("Configure des apps et laisse PauseApp intercepter quelques ouvertures.")
                     .font(.system(size: 15)).foregroundStyle(Theme.textDim)
                     .multilineTextAlignment(.center).padding(.horizontal, 40)
             }
