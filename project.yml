@@ -13,34 +13,77 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: 1
-    PRODUCT_BUNDLE_IDENTIFIER: fr.louisbelpa.pauseapp
     SWIFT_STRICT_CONCURRENCY: complete
 
 targets:
+
   PauseApp:
     type: application
     platform: iOS
     sources:
       - path: PauseApp
+      - path: Shared
     info:
       path: PauseApp/Info.plist
       properties:
         CFBundleDisplayName: PauseApp
         CFBundleName: PauseApp
-        CFBundleURLTypes:
-          - CFBundleURLSchemes:
-              - pauseapp
-            CFBundleURLName: fr.louisbelpa.pauseapp
-        LSApplicationQueriesSchemes:
-          - instagram
-          - snssdk1233
-          - twitter
-          - youtube
-          - linkedin
-          - reddit
+        NSFamilyControlsUsageDescription: "PauseApp utilise Screen Time pour bloquer les apps choisies et afficher une pause intentionnelle à chaque ouverture."
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+    entitlements:
+      path: PauseApp/PauseApp.entitlements
     settings:
       base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.louisbelpa.pauseapp
         INFOPLIST_FILE: PauseApp/Info.plist
+    dependencies:
+      - target: PauseAppShield
+      - target: PauseAppShieldAction
+      - sdk: FamilyControls.framework
+      - sdk: ManagedSettings.framework
+      - sdk: DeviceActivity.framework
+
+  PauseAppShield:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PauseAppShield
+      - path: Shared
+    info:
+      path: PauseAppShield/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.managed-settings.shield.ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
+    entitlements:
+      path: PauseAppShield/PauseAppShield.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.louisbelpa.pauseapp.shield
+        INFOPLIST_FILE: PauseAppShield/Info.plist
+    dependencies:
+      - sdk: ManagedSettings.framework
+      - sdk: ManagedSettingsUI.framework
+
+  PauseAppShieldAction:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PauseAppShieldAction
+      - path: Shared
+    info:
+      path: PauseAppShieldAction/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.managed-settings.shield
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldActionExtension
+    entitlements:
+      path: PauseAppShieldAction/PauseAppShieldAction.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.louisbelpa.pauseapp.shieldaction
+        INFOPLIST_FILE: PauseAppShieldAction/Info.plist
+    dependencies:
+      - sdk: ManagedSettings.framework
