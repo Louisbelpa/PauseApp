@@ -1,3 +1,4 @@
+import Foundation
 import ManagedSettings
 
 class ShieldActionExtension: ShieldActionDelegate {
